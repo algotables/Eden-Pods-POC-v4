@@ -49,6 +49,26 @@ export function explorerTxUrl(txId: string): string {
   return `${EXPLORER_BASE}/tx/${txId}`;
 }
 
+/**
+ * Truncate a string so its UTF-8 byte length does not exceed `maxBytes`.
+ * Algorand enforces a hard 32-byte limit on asset names; JS .slice() counts
+ * characters, not bytes, so emojis (4 bytes each) can push past the limit.
+ */
+function truncateToBytes(str: string, maxBytes: number): string {
+  const enc = new TextEncoder();
+  if (enc.encode(str).length <= maxBytes) return str;
+  // Walk codepoints until we'd exceed the limit
+  let byteCount = 0;
+  let result    = "";
+  for (const char of str) {
+    const charBytes = enc.encode(char).length;
+    if (byteCount + charBytes > maxBytes) break;
+    byteCount += charBytes;
+    result    += char;
+  }
+  return result;
+}
+
 function sanitiseForJson(val: unknown): unknown {
   if (typeof val === "bigint") return Number(val);
   if (Array.isArray(val))     return val.map(sanitiseForJson);
@@ -138,7 +158,7 @@ export async function buildMintThrowTxns(params: {
 }): Promise<algosdk.Transaction[]> {
   if (!params.senderAddress) throw new Error("Wallet not connected");
   const sp   = await getAlgod().getTransactionParams().do();
-  const name = `Eden Throw ${params.metadata.podTypeIcon} ${params.metadata.podTypeName}`.slice(0, 32);
+  const name = truncateToBytes(`Eden Throw ${params.metadata.podTypeIcon} ${params.metadata.podTypeName}`, 32);
   const txn  = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
     sender:          params.senderAddress,
     assetName:       name,
